@@ -1,10 +1,21 @@
 from flask import Flask, render_template, request, jsonify
+from werkzeug.utils import secure_filename
 import os
 from backend.video_generator import generate_video
 from backend.model_trainer import train_model
 from backend.chat_engine import chat_response
 
 app = Flask(__name__)
+
+# 简单的GPU参数映射（前端到脚本）
+def _map_gpu_choice(gpu_choice: str) -> str:
+    if not gpu_choice:
+        return "GPU0"
+    val = str(gpu_choice).upper()
+    if val in ("GPU0", "GPU1", "CPU"):
+        return val
+    # 前端的 auto / multi 统一回退到 GPU0
+    return "GPU0"
 
 # 首页
 @app.route('/')
@@ -15,15 +26,33 @@ def index():
 @app.route('/video_generation', methods=['GET', 'POST'])
 def video_generation():
     if request.method == 'POST':
+        # 处理音频上传（字段名：audio_file）
+        os.makedirs('./static/audios', exist_ok=True)
+        saved_audio_path = None
+        if 'audio_file' in request.files:
+            audio_file = request.files['audio_file']
+            if audio_file and audio_file.filename:
+                filename = secure_filename(audio_file.filename)
+                # 避免重名，加入时间戳
+                name, ext = os.path.splitext(filename)
+                filename = f"{int(__import__('time').time())}_{name}{ext}"
+                save_path = os.path.join('static', 'audios', filename)
+                audio_file.save(save_path)
+                saved_audio_path = save_path
+
         data = {
             "model_name": request.form.get('model_name'),
             "model_param": request.form.get('model_param'),
-            "ref_audio": request.form.get('ref_audio'),
-            "gpu_choice": request.form.get('gpu_choice'),
+            # 优先使用实际保存的音频路径
+            "ref_audio": saved_audio_path or request.form.get('ref_audio'),
+            "gpu_choice": _map_gpu_choice(request.form.get('gpu_choice')),
             "target_text": request.form.get('target_text'),
         }
 
         video_path = generate_video(data)
+        # 前端使用的路径统一加前缀"/"并规范分隔符
+        if isinstance(video_path, str):
+            video_path = "/" + video_path.replace("\\", "/")
         return jsonify({'status': 'success', 'video_path': video_path})
 
     return render_template('video_generation.html')
@@ -33,12 +62,16 @@ def video_generation():
 @app.route('/model_training', methods=['GET', 'POST'])
 def model_training():
     if request.method == 'POST':
+        # 是否生成训练日志
+        generate_log = bool(request.form.get('generate_log'))
+
         data = {
             "model_choice": request.form.get('model_choice'),
             "ref_video": request.form.get('ref_video'),
-            "gpu_choice": request.form.get('gpu_choice'),
+            "gpu_choice": _map_gpu_choice(request.form.get('gpu_choice')),
             "epoch": request.form.get('epoch'),
-            "custom_params": request.form.get('custom_params')
+            "custom_params": request.form.get('custom_params'),
+            "generate_log": generate_log,
         }
 
         video_path = train_model(data)

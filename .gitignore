@@ -7,8 +7,11 @@ build/
 dist/
 *.egg-info/
 
-SyncTalk/SyncTalk/
+SyncTalk/
 
-GPT-SoVITS/
+SyncTalk-Docker/
+
+static/audios/
+static/videos/
 
 test_data/
