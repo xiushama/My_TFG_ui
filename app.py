@@ -140,7 +140,10 @@ def save_audio():
     
     # 保存文件
     audio_file.save('./static/audios/input.wav')
-    
+
+    # Trigger backend chat processing after audio upload
+    chat_response({})
+
     return jsonify({'status': 'success', 'message': '音频保存成功'})
 
 
